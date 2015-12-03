@@ -11,7 +11,7 @@ r = Recipe.create(name='红烧肉', author=MagicMock(id=1), cover='ident_cover',
 
 # print(r, r.data.name)
 
-Recipe.update(r.id, name='懒人红烧肉', cover='ident_cover',
+Recipe.update(r.id, name='懒人红烧肉👟🙋', cover='ident_cover',
     ings=[{'text': '水', 'unit': '很多'}, {'text': '肉'}, {'text': '葱花'}],
     steps=[{'text': '焯水', 'ident': 'i1'}, {'text': '爆炒', 'ident': ''}, {'text': '收汁'}],
     desc='很好吃很家常的红烧肉', tip='')
