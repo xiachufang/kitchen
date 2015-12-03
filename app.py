@@ -19,3 +19,5 @@ Recipe.update(r.id, name='懒人红烧肉👟🙋', cover='ident_cover',
 r = Recipe.get(r.id)
 print(r.data)
 print('get', r, r.data.name)
+
+assert '懒人红烧肉👟🙋' == r.data.name
