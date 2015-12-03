@@ -12,7 +12,7 @@ before_script:
     - conda env create -f environment.yml
     - source activate kitchen
     - ci/lint.sh
-    - ./setup_db.sh
+    - python setup_db.sh
 
 script:
-    - python setup_db.py
+    - python app.py
