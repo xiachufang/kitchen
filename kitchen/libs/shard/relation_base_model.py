@@ -2,9 +2,9 @@ import sqlalchemy as sa
 from .helpers import make_unique_id, parse_unique_id
 
 
-class ObjectMetaModel(type):
-    required_attrs = ('table', 'type_id', 'shard_func')
-    required_columns = ('local_id',)
+class RelationMetaModel(type):
+    required_attrs = ('table', 'shard_func')
+    required_columns = ()
 
     reserved_attrs = ('id', 'local_id', 'shard_id', 'c')
     reserved_columns = ('id', 'shard_id', 'type_id', 'c')
@@ -12,7 +12,7 @@ class ObjectMetaModel(type):
 
     def __new__(cls, name, bases, nmspc):
         if nmspc.get('abstract'):
-            return super(ObjectMetaModel, cls).__new__(cls, name, bases, nmspc)
+            return super(RelationMetaModel, cls).__new__(cls, name, bases, nmspc)
 
         if not all(attr in nmspc for attr in cls.required_attrs):
             raise ValueError('%s required' % str(cls.required_attrs))
@@ -38,11 +38,11 @@ class ObjectMetaModel(type):
             raise ValueError('%s required' % str(cls.required_columns))
 
         nmspc['c'] = table.c
-        return super(ObjectMetaModel, cls).__new__(cls, name, bases, nmspc)
+        return super(ReferenceError, cls).__new__(cls, name, bases, nmspc)
 
 
-def create_object_base_model(shard_engine):
-    class ObjectBaseModel(metaclass=ObjectMetaModel):
+def create_relation_base_model(shard_engine):
+    class RelationMetaModel(metaclass=RelationMetaModel):
         abstract = True
 
         def __init__(self, **kwargs):
@@ -53,14 +53,14 @@ def create_object_base_model(shard_engine):
                 id=self.id, shard_id=self.shard_id, type_id=self.type_id, local_id=self.local_id)
 
         @classmethod
-        def get_engine(cls, id=None, shard_id=None):
+        def get_engine(cls, key=None, shard_id=None):
             if shard_id is not None:
                 return shard_engine.get_engine_by_shard_id(shard_id)
 
-            if id is None:
-                id = getattr(cls, 'id', None)
+            if key is None:
+                id = getattr(cls, 'key', None)
 
-            shard_id, _, _ = parse_unique_id(id)
+            shard_id = cls.shard_func(key)
 
             return shard_engine.get_engine_by_shard_id(shard_id)
 
@@ -68,7 +68,6 @@ def create_object_base_model(shard_engine):
 
         @classmethod
         def create(cls, **kwargs):
-            shard_id = cls.shard_func()
             engine = cls.get_engine(shard_id)
             ret = engine.execute(cls.table.insert().values(**kwargs))
             local_id = ret.inserted_primary_key[0]
@@ -84,11 +83,12 @@ def create_object_base_model(shard_engine):
             return cls(id=id, shard_id=shard_id, **ret)
 
         @classmethod
-        def update(cls, id, **kwargs):
+        def where(cls, id, for_update=False):
             shard_id, type_id, local_id = parse_unique_id(id)
             engine = cls.get_engine(shard_id)
-            clause = cls.table.update().where(cls.c.local_id == local_id).values(**kwargs)
-            return engine.execute(clause)
+            clause = cls.table.select(for_update=for_update).where(cls.c.local_id == local_id)
+            ret = engine.execute(clause).fetchone()
+            return cls(id=id, shard_id=shard_id, **ret)
 
         @classmethod
         def delete(cls, id):
@@ -96,4 +96,4 @@ def create_object_base_model(shard_engine):
             engine = cls.get_engine(shard_id)
             return engine.execute(cls.table.delete().where(cls.c.local_id == local_id))
 
-    return ObjectBaseModel
+    return RelationMetaModel

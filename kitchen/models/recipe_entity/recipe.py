@@ -1,17 +1,11 @@
 import datetime
-import random
 import sqlalchemy as sa
 from kitchen.libs.sqlalchemy_json_type import JSONType
-from kitchen.models.base import shard_engine, metadata, ObjectBaseModel
-
-
-def choose_shard_id():
-    shard_id = random.choice(shard_engine.shard_ids)
-    return shard_id
+from kitchen.models.base import metadata, ObjectBaseModel
 
 
 class Recipe(ObjectBaseModel):
-    type_id = 1
+    type_id = 2
     table = sa.Table('recipe', metadata,
         sa.Column('local_id', sa.Integer, primary_key=True, autoincrement=True,
             nullable=False),
@@ -19,7 +13,6 @@ class Recipe(ObjectBaseModel):
         sa.Column('sequence', sa.DateTime(timezone=True), nullable=False,
             default=datetime.datetime.now)
     )
-    shard_func = choose_shard_id
 
     def __repr__(self):
         return '<Recipe:{shard_id}:{local_id} {id} {name}>'.format(
