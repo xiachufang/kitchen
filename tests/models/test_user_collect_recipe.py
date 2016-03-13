@@ -1,6 +1,6 @@
 import pytest
 import datetime
-from kitchen.models.collect import Collect, UserDAO, RecipeDAO
+from kitchen.models.collect import CollectRecipe
 
 
 @pytest.fixture(params=range(4))
@@ -9,61 +9,65 @@ def user_id(request):
 
 
 @pytest.fixture(params=range(4))
-def recipe_id(request):
+def target_id(request):
     return request.param
 
 
-class TestCollect:
-    def test_create(self, user_id, recipe_id):
+UserDAO = CollectRecipe.UserDAO
+RecipeDAO = CollectRecipe.TargetDAO
+
+
+class TestCollectRecipe:
+    def test_create(self, user_id, target_id):
         sequence = datetime.datetime.now()
 
-        Collect.insert(user_id, recipe_id, sequence)
+        CollectRecipe.insert(user_id, target_id, sequence)
 
         assert UserDAO.select_shard(user_id).select().where(
             UserDAO.user_id == user_id,
-            UserDAO.recipe_id == recipe_id,
+            UserDAO.target_id == target_id,
         ).count() == 1
-        assert RecipeDAO.select_shard(recipe_id).select().where(
+        assert RecipeDAO.select_shard(target_id).select().where(
             RecipeDAO.user_id == user_id,
-            RecipeDAO.recipe_id == recipe_id,
+            RecipeDAO.target_id == target_id,
         ).count() == 1
 
-    def test_delete(self, user_id, recipe_id):
+    def test_delete(self, user_id, target_id):
         sequence = datetime.datetime.now()
 
-        Collect.insert(user_id, recipe_id, sequence)
+        CollectRecipe.insert(user_id, target_id, sequence)
 
-        Collect.delete(user_id, recipe_id)
+        CollectRecipe.delete(user_id, target_id)
 
         assert UserDAO.select_shard(user_id).select().where(
             UserDAO.user_id == user_id,
-            UserDAO.recipe_id == recipe_id,
+            UserDAO.target_id == target_id,
         ).count() == 0
-        assert RecipeDAO.select_shard(recipe_id).select().where(
+        assert RecipeDAO.select_shard(target_id).select().where(
             RecipeDAO.user_id == user_id,
-            RecipeDAO.recipe_id == recipe_id,
+            RecipeDAO.target_id == target_id,
         ).count() == 0
 
-    def test_recipes_collected_by_user(self, recipe_id, user_id):
-        Collect.insert(user_id, recipe_id)
-        assert Collect.recipes_collected_by_user(user_id) == [recipe_id]
-        Collect.delete(user_id, recipe_id)
-        assert Collect.recipes_collected_by_user(user_id) == []
+    def test_recipes_collected_by_user(self, target_id, user_id):
+        CollectRecipe.insert(user_id, target_id)
+        assert CollectRecipe.recipes_collected_by_user(user_id) == [target_id]
+        CollectRecipe.delete(user_id, target_id)
+        assert CollectRecipe.recipes_collected_by_user(user_id) == []
 
-    def test_users_collecting_recipe(self, recipe_id, user_id):
-        Collect.insert(user_id, recipe_id)
-        assert Collect.users_collecting_recipe(recipe_id) == [user_id]
-        Collect.delete(user_id, recipe_id)
-        assert Collect.users_collecting_recipe(recipe_id) == []
+    def test_users_collecting_recipe(self, target_id, user_id):
+        CollectRecipe.insert(user_id, target_id)
+        assert CollectRecipe.users_collecting_recipe(target_id) == [user_id]
+        CollectRecipe.delete(user_id, target_id)
+        assert CollectRecipe.users_collecting_recipe(target_id) == []
 
-    def test_count_recipes_collected_by_user(self, recipe_id, user_id):
-        Collect.insert(user_id, recipe_id)
-        assert Collect.recipes_collected_by_user(user_id) == 1
-        Collect.delete(user_id, recipe_id)
-        assert Collect.recipes_collected_by_user(user_id) == 0
+    def test_count_recipes_collected_by_user(self, target_id, user_id):
+        CollectRecipe.insert(user_id, target_id)
+        assert CollectRecipe.recipes_collected_by_user(user_id) == 1
+        CollectRecipe.delete(user_id, target_id)
+        assert CollectRecipe.recipes_collected_by_user(user_id) == 0
 
-    def test_count_recipe_collected_times(self, recipe_id, user_id):
-        Collect.insert(user_id, recipe_id)
-        assert Collect.count_recipe_collected_times(recipe_id) == 1
-        Collect.delete(user_id, recipe_id)
-        assert Collect.count_recipe_collected_times(recipe_id) == 0
+    def test_count_recipe_collected_times(self, target_id, user_id):
+        CollectRecipe.insert(user_id, target_id)
+        assert CollectRecipe.count_recipe_collected_times(target_id) == 1
+        CollectRecipe.delete(user_id, target_id)
+        assert CollectRecipe.count_recipe_collected_times(target_id) == 0

@@ -1,0 +1,74 @@
+import datetime
+from peewee import DateTimeField
+from kitchen.daos.base import BaseDAO
+from kitchen.libs.fields import UnsignedBigIntegerField
+
+
+def user_activity_base(activity):
+    class UserDAO(BaseDAO):
+        user_id = UnsignedBigIntegerField(null=False, index=True)
+        target_id = UnsignedBigIntegerField(null=False)
+        sequence = DateTimeField(default=datetime.datetime.now, null=False)
+
+    class TargetDAO(BaseDAO):
+        target_id = UnsignedBigIntegerField(null=False, index=True)
+        user_id = UnsignedBigIntegerField(null=False)
+        sequence = DateTimeField(default=datetime.datetime.now, null=False)
+
+    UserDAO._meta.db_table = '%s_%s' % (activity, UserDAO._meta.db_table)
+    TargetDAO._meta.db_table = '%s_%s' % (activity, TargetDAO._meta.db_table)
+
+    class Action(object):
+
+        @classmethod
+        def insert(cls, user_id, target_id, sequence=None):
+            if not sequence:
+                sequence = datetime.datetime.now()
+            UserDAO.select_shard(user_id).insert(user_id=user_id, target_id=target_id, sequence=sequence).execute()
+            TargetDAO.select_shard(target_id).insert(user_id=user_id, target_id=target_id, sequence=sequence).execute()
+
+        @classmethod
+        def delete(cls, user_id, target_id):
+            UserDAO.select_shard(user_id).delete().where(
+                UserDAO.user_id == user_id,
+                UserDAO.target_id == target_id
+            ).execute()
+            TargetDAO.select_shard(target_id).delete().where(
+                TargetDAO.user_id == user_id,
+                TargetDAO.target_id == target_id
+            ).execute()
+
+        @classmethod
+        def recipes_collected_by_user(cls, user_id, cursor=0, size=20):
+            return UserDAO.select_shard(user_id).select(UserDAO.target_id).where(
+                UserDAO.user_id == user_id
+            ).order_by(UserDAO.sequence.desc()).limit(size).offset(cursor)
+
+        @classmethod
+        def users_collecting_recipe(cls, target_id, cursor=0, size=20):
+            return TargetDAO.select_shard(target_id).select(TargetDAO.target_id).where(
+                TargetDAO.target_id == target_id
+            ).order_by(TargetDAO.sequence.desc()).limit(size).offset(cursor)
+
+        @classmethod
+        def count_recipes_collected_by_user(cls, user_id):
+            return UserDAO.select_shard(user_id).select().where(
+                UserDAO.user_id == user_id
+            ).count()
+
+        @classmethod
+        def count_recipe_collected_times(cls, target_id):
+            return TargetDAO.select_shard(target_id).select().where(
+                TargetDAO.target_id == target_id
+            ).count()
+
+        @classmethod
+        def if_recipes_are_collected_by_user(cls, target_ids, user_id):
+            collected_target_ids = UserDAO.select_shard(user_id).select(UserDAO.target_id).where(
+                UserDAO.user_id._in(target_ids)
+            ).execute()
+            return dict((str(rid), int(rid) in collected_target_ids) for rid in target_ids)
+
+    Action.UserDAO = UserDAO
+    Action.TargetDAO = TargetDAO
+    return Action

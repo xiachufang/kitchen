@@ -5,8 +5,29 @@ from kitchen.libs.shard.engine import ShardDatabase
 shard_db = ShardDatabase()
 
 
-class BaseDAO(Model):
+class MetaClass(Model.__class__):
+    models = set()
+
+    def __new__(cls, name, bases, attrs):
+        _meta = attrs.get('Meta', None)
+        clazz = super(MetaClass, cls).__new__(cls, name, bases, attrs)
+        if _meta and getattr(_meta, 'abstract', True):
+            return clazz
+
+        cls.models.add(clazz)
+        return clazz
+
+
+def with_metaclass(meta, base=object):
     class Meta:
+        abstract = True
+
+    return meta('NewBase', (base,), {'Meta': Meta})
+
+
+class BaseDAO(with_metaclass(MetaClass, Model)):
+    class Meta:
+        abstract = True
         database = shard_db
 
     @classmethod
