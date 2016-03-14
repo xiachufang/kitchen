@@ -48,26 +48,26 @@ class TestCollectRecipe:
             RecipeDAO.target_id == target_id,
         ).count() == 0
 
-    def test_recipes_collected_by_user(self, target_id, user_id):
+    def test_targets_by_user(self, target_id, user_id):
         CollectRecipe.insert(user_id, target_id)
-        assert CollectRecipe.recipes_collected_by_user(user_id) == [target_id]
+        assert CollectRecipe.targets_by_user(user_id) == [target_id]
         CollectRecipe.delete(user_id, target_id)
-        assert CollectRecipe.recipes_collected_by_user(user_id) == []
+        assert CollectRecipe.targets_by_user(user_id) == []
 
-    def test_users_collecting_recipe(self, target_id, user_id):
+    def test_users_by_target(self, target_id, user_id):
         CollectRecipe.insert(user_id, target_id)
-        assert CollectRecipe.users_collecting_recipe(target_id) == [user_id]
+        assert CollectRecipe.users_by_target(target_id) == [user_id]
         CollectRecipe.delete(user_id, target_id)
-        assert CollectRecipe.users_collecting_recipe(target_id) == []
+        assert CollectRecipe.users_by_target(target_id) == []
 
-    def test_count_recipes_collected_by_user(self, target_id, user_id):
+    def test_count_targets_by_user(self, target_id, user_id):
         CollectRecipe.insert(user_id, target_id)
-        assert CollectRecipe.recipes_collected_by_user(user_id) == 1
+        assert CollectRecipe.targets_by_user(user_id) == 1
         CollectRecipe.delete(user_id, target_id)
-        assert CollectRecipe.recipes_collected_by_user(user_id) == 0
+        assert CollectRecipe.targets_by_user(user_id) == 0
 
-    def test_count_recipe_collected_times(self, target_id, user_id):
+    def test_count_users_by_target(self, target_id, user_id):
         CollectRecipe.insert(user_id, target_id)
-        assert CollectRecipe.count_recipe_collected_times(target_id) == 1
+        assert CollectRecipe.count_users_by_target(target_id) == 1
         CollectRecipe.delete(user_id, target_id)
-        assert CollectRecipe.count_recipe_collected_times(target_id) == 0
+        assert CollectRecipe.count_users_by_target(target_id) == 0

@@ -39,31 +39,31 @@ def user_activity_base(activity):
             ).execute()
 
         @classmethod
-        def recipes_collected_by_user(cls, user_id, cursor=0, size=20):
+        def targets_by_user(cls, user_id, cursor=0, size=20):
             return UserDAO.select_shard(user_id).select(UserDAO.target_id).where(
                 UserDAO.user_id == user_id
             ).order_by(UserDAO.sequence.desc()).limit(size).offset(cursor)
 
         @classmethod
-        def users_collecting_recipe(cls, target_id, cursor=0, size=20):
+        def users_by_target(cls, target_id, cursor=0, size=20):
             return TargetDAO.select_shard(target_id).select(TargetDAO.target_id).where(
                 TargetDAO.target_id == target_id
             ).order_by(TargetDAO.sequence.desc()).limit(size).offset(cursor)
 
         @classmethod
-        def count_recipes_collected_by_user(cls, user_id):
+        def count_targets_by_user(cls, user_id):
             return UserDAO.select_shard(user_id).select().where(
                 UserDAO.user_id == user_id
             ).count()
 
         @classmethod
-        def count_recipe_collected_times(cls, target_id):
+        def count_users_by_target(cls, target_id):
             return TargetDAO.select_shard(target_id).select().where(
                 TargetDAO.target_id == target_id
             ).count()
 
         @classmethod
-        def if_recipes_are_collected_by_user(cls, target_ids, user_id):
+        def if_user_has_targets(cls, user_id, target_ids):
             collected_target_ids = UserDAO.select_shard(user_id).select(UserDAO.target_id).where(
                 UserDAO.user_id._in(target_ids)
             ).execute()
