@@ -11,8 +11,6 @@ before_script:
     - export PATH="$HOME/miniconda/bin:$PATH"
     - conda env create -f environment.yml
     - source activate kitchen
-    - ci/lint.sh
-    - python setup_db.py
 
 script:
-    - python app.py
+    - python setup.py test
