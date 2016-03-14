@@ -1,63 +1,83 @@
-from sqlalchemy import event
-from sqlalchemy.engine import Engine
-from .connection import ShardConnection
+import hashlib
+from playhouse.pool import PooledMySQLDatabase
+from .config import ShardConfig
 
 
-class ShardEngine:
-    def __init__(self, hosts, **db_config):
+class PooledMySQLMutipleDatabase(PooledMySQLDatabase):
+    def __init__(self, *args, **kwargs):
+        super(PooledMySQLMutipleDatabase, self).__init__(database='', *args, **kwargs)
+
+    def use_db(self, db_name):
+        self.execute_sql('USE %s' % db_name)
+
+
+class ShardDatabase(object):
+    def configure(self, conf):
         '''
-        settings:
-            [
-                {'range': range(0, 511), 'master': 'MySQL001A', 'slave': 'MySQL001B'},
-                {'range': range(512, 1023), 'master': 'MySQL002A', 'slave': 'MySQL002B'},
-                {'range': range(3584, 4095), 'master': 'MySQL008A', 'slave': 'MySQL008B'}
-            ]
+        config: Config object
         '''
-        self.shard_connection = ShardConnection(hosts, **db_config)
+        self.connections = {}
+        self.selected_db = {}
+        self.config = ShardConfig(conf)
+        for host_conf in self.config.hosts:
+            host_url = host_conf['master']
+            db = PooledMySQLMutipleDatabase(
+                host=host_url,
+                user=self.config.username,
+                password=self.config.password
+            )
+            self.connections[host_url] = db
+            self.selected_db[host_url] = None
+        self.current_db = None
 
-        @event.listens_for(Engine, "before_cursor_execute")
-        def _switch_shard(conn, cursor, stmt, params, context, executemany):
-            shard_id = conn._execution_options.get('shard_id', None)
-            if shard_id is None:
-                return
-            current_shard = conn.info.get("current_shard")
+    def __iter__(self):
+        for shard_id in self.config.shard_ids:
+            yield self.get_db_by_shard_id(shard_id)
 
-            if current_shard != shard_id:
-                cursor.execute("use %s" % self.get_db_name_by_shard_id(shard_id))
-                conn.info["current_shard"] = shard_id
+    def get_conn_by_shard_id(self, shard_id):
+        host_conf = self.config.get_host_by_shard_id(shard_id)
+        host_url = host_conf['master']
+        return self.connections[host_url]
 
-    @property
-    def shard_ids(self):
-        return self.shard_connection.shard_ids
-
-    def get_db_name_by_shard_id(self, shard_id):
-        return self.shard_connection.get_db_name_by_shard_id(shard_id)
-
-    def get_host_by_shard_id(self, shard_id):
-        return self.shard_connection.get_host_by_shard_id(shard_id)
-
-    def get_connection_by_shard_id(self, shard_id):
-        return self.shard_connection.get_connection_by_shard_id(shard_id)
-
-    def get_engine_by_shard_id(self, shard_id):
-        conn = self.get_connection_by_shard_id(shard_id)
-        if conn._execution_options.get('shard_id') != shard_id:
-            conn.update_execution_options(shard_id=shard_id)
+    def get_db_by_shard_id(self, shard_id):
+        host_conf = self.config.get_host_by_shard_id(shard_id)
+        host_url = host_conf['master']
+        db_name = self.config.get_db_name_by_shard_id(shard_id)
+        conn = self.connections[host_url]
+        if self.selected_db[host_url] != db_name:
+            conn.use_db(db_name)
+            self.selected_db[host_url] = db_name
         return conn
 
+    def select_shard_by_shard_id(self, shard_id):
+        self.current_db = self.get_db_by_shard_id(shard_id)
+        return self
 
-def create_databases_and_tables(shard_engine, metadata):
-    for shard_id in shard_engine.shard_ids:
-        db_name = shard_engine.get_db_name_by_shard_id(shard_id)
-        conn = shard_engine.get_connection_by_shard_id(shard_id)
-        conn.execute('CREATE DATABASE IF NOT EXISTS %s' % db_name)
+    def select_shard(self, key):
+        k = str(key)
+        if isinstance(k, str):
+            k = k.encode('utf-8')
+        shard_id = int(hashlib.md5(k).hexdigest(), 16) % self.config.total_shards
+        self.select_shard_by_shard_id(shard_id)
+        return self
 
-        engine = shard_engine.get_engine_by_shard_id(shard_id)
-        metadata.create_all(engine)
+    def __getattr__(self, k, v=None):
+        if not self.current_db:
+            raise ValueError('no current db')
+        return getattr(self.current_db, k, v)
 
 
-def drop_databases(shard_engine):
-    for shard_id in shard_engine.shard_ids:
-        db_name = shard_engine.get_db_name_by_shard_id(shard_id)
-        conn = shard_engine.get_connection_by_shard_id(shard_id)
-        conn.execute('DROP DATABASE IF EXISTS %s' % db_name)
+def create_databases_and_tables(shard_db, models):
+    for shard_id in shard_db.config.shard_ids:
+        db_name = shard_db.config.get_db_name_by_shard_id(shard_id)
+        conn = shard_db.get_conn_by_shard_id(shard_id)
+        conn.execute_sql('CREATE DATABASE IF NOT EXISTS %s;' % (db_name,))
+        shard_db.select_shard_by_shard_id(shard_id)
+        shard_db.create_tables(models, safe=True)
+
+
+def drop_databases(shard_db):
+    for shard_id in shard_db.config.shard_ids:
+        db_name = shard_db.config.get_db_name_by_shard_id(shard_id)
+        shard_db.select_shard_by_shard_id(shard_id)
+        shard_db.execute_sql('DROP DATABASE IF EXISTS `%s`;' % db_name)
