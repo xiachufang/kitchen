@@ -1,3 +1,4 @@
+import threading
 import hashlib
 from playhouse.pool import PooledMySQLDatabase
 from .config import ShardConfig
@@ -12,23 +13,27 @@ class PooledMySQLMutipleDatabase(PooledMySQLDatabase):
 
 
 class ShardDatabase(object):
+    def __init__(self):
+        self.connections = {}
+        self.config = None
+        self.local = threading.local()
+        self.local.selected_catalog = {}
+        self.local.current_db = None
+
     def configure(self, conf):
         '''
         config: Config object
         '''
-        self.connections = {}
-        self.selected_db = {}
         self.config = ShardConfig(conf)
         for host_conf in self.config.hosts:
             host_url = host_conf['master']
-            db = PooledMySQLMutipleDatabase(
+            conn = PooledMySQLMutipleDatabase(
                 host=host_url,
                 user=self.config.username,
                 password=self.config.password
             )
-            self.connections[host_url] = db
-            self.selected_db[host_url] = None
-        self.current_db = None
+            self.connections[host_url] = conn
+            self.local.selected_catalog[host_url] = None
 
     def __iter__(self):
         for shard_id in self.config.shard_ids:
@@ -44,13 +49,13 @@ class ShardDatabase(object):
         host_url = host_conf['master']
         db_name = self.config.get_db_name_by_shard_id(shard_id)
         conn = self.connections[host_url]
-        if self.selected_db[host_url] != db_name:
+        if self.local.selected_catalog[host_url] != db_name:
             conn.use_db(db_name)
-            self.selected_db[host_url] = db_name
+            self.local.selected_catalog[host_url] = db_name
         return conn
 
     def select_shard_by_shard_id(self, shard_id):
-        self.current_db = self.get_db_by_shard_id(shard_id)
+        self.local.current_db = self.get_db_by_shard_id(shard_id)
         return self
 
     def select_shard(self, key):
@@ -61,10 +66,18 @@ class ShardDatabase(object):
         self.select_shard_by_shard_id(shard_id)
         return self
 
+    def connect(self):
+        for conn in self.connections.values():
+            conn.connect()
+
+    def close(self):
+        for conn in self.connections.values():
+            conn.close()
+
     def __getattr__(self, k, v=None):
-        if not self.current_db:
+        if not self.local.current_db:
             raise ValueError('no current db')
-        return getattr(self.current_db, k, v)
+        return getattr(self.local.current_db, k, v)
 
 
 def create_databases_and_tables(shard_db, models):
@@ -80,4 +93,5 @@ def drop_databases(shard_db):
     for shard_id in shard_db.config.shard_ids:
         db_name = shard_db.config.get_db_name_by_shard_id(shard_id)
         shard_db.select_shard_by_shard_id(shard_id)
-        shard_db.execute_sql('DROP DATABASE IF EXISTS `%s`;' % db_name)
+        sql = 'DROP DATABASE IF EXISTS `%s`;' % db_name
+        shard_db.execute_sql(sql)

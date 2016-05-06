@@ -2,7 +2,7 @@ import operator
 from functools import reduce
 
 
-class ShardConfig:
+class ShardConfig(object):
     def __init__(self, config):
         '''
         config:
@@ -35,4 +35,7 @@ class ShardConfig:
         raise ValueError('no shard_id %s found' % shard_id)
 
     def get_db_name_by_shard_id(self, shard_id):
-        return self.db_pattern % shard_id
+        try:
+            return self.db_pattern % shard_id
+        except TypeError:
+            return self.db_pattern

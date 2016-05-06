@@ -10,8 +10,10 @@ setup(
     author_email='gfreezy@gmail.com',
     install_requires=[
         'peewee',
-        'flask',
+        'bottle',
         'pymysql',
+        'gunicorn',
+        'gevent',
     ],
     setup_requires=['pytest-runner'],
     tests_require=['pytest'],

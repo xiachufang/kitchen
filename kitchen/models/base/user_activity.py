@@ -6,17 +6,26 @@ from kitchen.libs.fields import UnsignedBigIntegerField
 
 def user_activity_base(activity):
     class UserDAO(BaseDAO):
+        class Meta:
+            db_table = '%s_userdao' % activity
+            indexes = (
+                (('user_id', 'target_id'), True),
+            )
+
         user_id = UnsignedBigIntegerField(null=False, index=True)
         target_id = UnsignedBigIntegerField(null=False)
         sequence = DateTimeField(default=datetime.datetime.now, null=False)
 
     class TargetDAO(BaseDAO):
+        class Meta:
+            db_table = '%s_targetdao' % activity
+            indexes = (
+                (('target_id', 'user_id'), True),
+            )
+
         target_id = UnsignedBigIntegerField(null=False, index=True)
         user_id = UnsignedBigIntegerField(null=False)
         sequence = DateTimeField(default=datetime.datetime.now, null=False)
-
-    UserDAO._meta.db_table = '%s_%s' % (activity, UserDAO._meta.db_table)
-    TargetDAO._meta.db_table = '%s_%s' % (activity, TargetDAO._meta.db_table)
 
     class Action(object):
 
@@ -40,15 +49,15 @@ def user_activity_base(activity):
 
         @classmethod
         def targets_by_user(cls, user_id, cursor=0, size=20):
-            return UserDAO.select_shard(user_id).select(UserDAO.target_id).where(
+            return list(a.user_id for a in UserDAO.select_shard(user_id).select(UserDAO.target_id).where(
                 UserDAO.user_id == user_id
-            ).order_by(UserDAO.sequence.desc()).limit(size).offset(cursor)
+            ).order_by(UserDAO.sequence.desc()).limit(size).offset(cursor))
 
         @classmethod
         def users_by_target(cls, target_id, cursor=0, size=20):
-            return TargetDAO.select_shard(target_id).select(TargetDAO.target_id).where(
+            return list(a.user_id for a in TargetDAO.select_shard(target_id).select(TargetDAO.target_id).where(
                 TargetDAO.target_id == target_id
-            ).order_by(TargetDAO.sequence.desc()).limit(size).offset(cursor)
+            ).order_by(TargetDAO.sequence.desc()).limit(size).offset(cursor))
 
         @classmethod
         def count_targets_by_user(cls, user_id):
